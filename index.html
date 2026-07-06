@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>體感 Flappy Bird (Web 版)</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #222;
+            color: white;
+            font-family: sans-serif;
+        }
+        canvas {
+            border: 4px solid #fff;
+            border-radius: 10px;
+            margin-top: 20px;
+            background-color: #000;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            font-size: 24px;
+            font-weight: bold;
+            color: #00ff00;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+    <h2>體感 Flappy Bird - 雙手手腕相碰來跳躍！</h2>
+    <div id="loading">載入 AI 模型與攝影機中，請稍候...</div>
+    
+    <video id="video" width="640" height="480" style="display: none;" autoplay playsinline></video>
+    <canvas id="gameCanvas" width="640" height="480"></canvas>
+
+    <script>
+        const videoElement = document.getElementById('video');
+        const canvasElement = document.getElementById('gameCanvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const loadingText = document.getElementById('loading');
+
+        // --- 遊戲變數 ---
+        const WIDTH = canvasElement.width;
+        const HEIGHT = canvasElement.height;
+        let bird = { x: 100, y: HEIGHT / 2, radius: 15, velocity: 0, gravity: 0.8, flapPower: -12 };
+        let pipe = { x: WIDTH, width: 60, gap: 150, speed: 5, topHeight: 0 };
+        let score = 0;
+        let gameOver = false;
+        let isWristsTouching = false;
+        let gameStarted = false;
+
+        // 初始化障礙物
+        function resetPipe() {
+            pipe.x = WIDTH;
+            pipe.topHeight = Math.floor(Math.random() * (HEIGHT - 200)) + 50;
+        }
+        resetPipe();
+
+        function resetGame() {
+            bird.y = HEIGHT / 2;
+            bird.velocity = 0;
+            score = 0;
+            gameOver = false;
+            resetPipe();
+        }
+
+        // 鍵盤 R 重置遊戲
+        window.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'r' && gameOver) {
+                resetGame();
+            }
+        });
+
+        // --- MediaPipe Pose 初始化 ---
+        const pose = new Pose({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+            }
+        });
+
+        pose.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: true,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        // 當 AI 辨識出結果時觸發此函數
+        pose.onResults((results) => {
+            if (!gameStarted) {
+                loadingText.style.display = 'none';
+                gameStarted = true;
+            }
+
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, WIDTH, HEIGHT);
+
+            // 1. 繪製攝影機畫面 (水平翻轉，像照鏡子一樣)
+            canvasCtx.translate(WIDTH, 0);
+            canvasCtx.scale(-1, 1);
+            canvasCtx.drawImage(results.image, 0, 0, WIDTH, HEIGHT);
+            
+            // 處理座標時也需要翻轉 X 軸
+            canvasCtx.translate(WIDTH, 0);
+            canvasCtx.scale(-1, 1);
+
+            // 2. 處理遊戲物理與邏輯
+            if (!gameOver) {
+                bird.velocity += bird.gravity;
+                bird.y += bird.velocity;
+
+                // 障礙物移動
+                pipe.x -= pipe.speed;
+                if (pipe.x < -pipe.width) {
+                    resetPipe();
+                    score++;
+                }
+
+                // 碰撞偵測 (碰到柱子或邊界)
+                if (bird.y - bird.radius < 0 || bird.y + bird.radius > HEIGHT) gameOver = true;
+                if (bird.x + bird.radius > pipe.x && bird.x - bird.radius < pipe.x + pipe.width) {
+                    if (bird.y - bird.radius < pipe.topHeight || bird.y + bird.radius > pipe.topHeight + pipe.gap) {
+                        gameOver = true;
+                    }
+                }
+
+                // --- 手腕碰撞偵測 ---
+                if (results.poseLandmarks) {
+                    const landmarks = results.poseLandmarks;
+                    const leftWrist = landmarks[15];
+                    const rightWrist = landmarks[16];
+
+                    // 確保手腕在畫面內
+                    if (leftWrist.visibility > 0.5 && rightWrist.visibility > 0.5) {
+                        // 計算歐幾里得距離
+                        const dx = leftWrist.x - rightWrist.x;
+                        const dy = leftWrist.y - rightWrist.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+
+                        const threshold = 0.08; // 距離閾值
+
+                        if (distance < threshold) {
+                            if (!isWristsTouching) {
+                                bird.velocity = bird.flapPower;
+                                isWristsTouching = true;
+                                
+                                // 畫個發光特效表示觸發成功 (需將標準化座標轉換為畫布座標，注意 X 軸已翻轉)
+                                canvasCtx.beginPath();
+                                canvasCtx.arc((1 - leftWrist.x) * WIDTH, leftWrist.y * HEIGHT, 30, 0, 2 * Math.PI);
+                                canvasCtx.strokeStyle = 'yellow';
+                                canvasCtx.lineWidth = 4;
+                                canvasCtx.stroke();
+                            }
+                        } else {
+                            isWristsTouching = false;
+                        }
+                    }
+                }
+            }
+
+            // 3. 繪製遊戲元素
+            if (!gameOver) {
+                // 畫柱子
+                canvasCtx.fillStyle = 'limegreen';
+                canvasCtx.fillRect(pipe.x, 0, pipe.width, pipe.topHeight);
+                canvasCtx.fillRect(pipe.x, pipe.topHeight + pipe.gap, pipe.width, HEIGHT - (pipe.topHeight + pipe.gap));
+
+                // 畫鳥
+                canvasCtx.beginPath();
+                canvasCtx.arc(bird.x, bird.y, bird.radius, 0, 2 * Math.PI);
+                canvasCtx.fillStyle = 'red';
+                canvasCtx.fill();
+
+                // 畫分數
+                canvasCtx.fillStyle = 'white';
+                canvasCtx.font = '30px Arial';
+                canvasCtx.fillText(`Score: ${score}`, 20, 40);
+            } else {
+                // 遊戲結束畫面
+                canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
+                canvasCtx.fillStyle = 'red';
+                canvasCtx.font = '50px Arial';
+                canvasCtx.fillText("GAME OVER", WIDTH / 2 - 140, HEIGHT / 2);
+                canvasCtx.fillStyle = 'white';
+                canvasCtx.font = '20px Arial';
+                canvasCtx.fillText("Press 'R' to Restart", WIDTH / 2 - 80, HEIGHT / 2 + 40);
+            }
+            canvasCtx.restore();
+        });
+
+        // --- 啟動攝影機 ---
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await pose.send({ image: videoElement });
+            },
+            width: 640,
+            height: 480
+        });
+        camera.start();
+
+    </script>
+</body>
+</html>
