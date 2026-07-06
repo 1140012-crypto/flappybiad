@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>體感 Flappy Bird (含操控測試)</title>
+    <title>體感 Flappy Bird (輕快放慢版)</title>
     <style>
         body {
             margin: 0;
@@ -33,7 +34,7 @@
 </head>
 <body>
 
-    <h2>體感 Flappy Bird - 雙手手腕相碰來跳躍！</h2>
+    <h2>體感 Flappy Bird - 雙手手掌相碰來跳躍！</h2>
     <div id="loading">載入 AI 模型與攝影機中，請稍候...</div>
     
     <video id="video" width="640" height="480" style="display: none;" autoplay playsinline></video>
@@ -48,7 +49,7 @@
         // --- 遊戲狀態定義 ---
         const STATES = {
             LOADING: 'LOADING',
-            TESTING: 'TESTING',     // 新增：操控測試狀態
+            TESTING: 'TESTING',
             PLAYING: 'PLAYING',
             GAMEOVER: 'GAMEOVER'
         };
@@ -57,11 +58,16 @@
         // --- 遊戲變數 ---
         const WIDTH = canvasElement.width;
         const HEIGHT = canvasElement.height;
-        let bird = { x: 100, y: HEIGHT / 2, radius: 15, velocity: 0, gravity: 0.8, flapPower: -12 };
-        let pipe = { x: WIDTH, width: 60, gap: 150, speed: 5, topHeight: 0 };
+        
+        // 【已修改】調整物理參數，讓重力更輕 (0.4)、向上的力道更溫和 (-8)，呈現慢速漂浮感
+        let bird = { x: 100, y: HEIGHT / 2, radius: 15, velocity: 0, gravity: 0.4, flapPower: -8 };
+        
+        // 【已修改】將柱子移動速度從 5 降至 4，讓玩家有更多反應時間
+        let pipe = { x: WIDTH, width: 60, gap: 150, speed: 4, topHeight: 0 }; 
+        
         let score = 0;
-        let isWristsTouching = false;
-        let testSuccessTimer = 0; // 用於測試成功後的倒數計時
+        let isPalmsTouching = false; 
+        let testSuccessTimer = 0;
 
         function resetPipe() {
             pipe.x = WIDTH;
@@ -76,7 +82,6 @@
             currentState = STATES.PLAYING;
         }
 
-        // 鍵盤 R 重置遊戲（只有在 GAME OVER 時有用）
         window.addEventListener('keydown', (e) => {
             if (e.key.toLowerCase() === 'r' && currentState === STATES.GAMEOVER) {
                 resetGame();
@@ -96,10 +101,9 @@
         });
 
         pose.onResults((results) => {
-            // 處理初始載入
             if (currentState === STATES.LOADING) {
                 loadingText.style.display = 'none';
-                currentState = STATES.TESTING; // 載入完成後，進入測試模式
+                currentState = STATES.TESTING;
             }
 
             canvasCtx.save();
@@ -112,36 +116,36 @@
             canvasCtx.translate(WIDTH, 0);
             canvasCtx.scale(-1, 1);
 
-            // 2. 核心偵測邏輯 (不論在哪個狀態，只要有偵測到人，就計算手腕距離)
-            let wristsCollided = false;
-            let leftWristPos = null;
+            // 2. 核心偵測邏輯
+            let palmsCollided = false;
+            let leftPalmPos = null;
 
             if (results.poseLandmarks) {
                 const landmarks = results.poseLandmarks;
-                const leftWrist = landmarks[15];
-                const rightWrist = landmarks[16];
+                
+                // 節點 19, 20 代表左/右食指指根（最貼近手掌中心的節點）
+                const leftPalm = landmarks[19];
+                const rightPalm = landmarks[20];
 
-                if (leftWrist.visibility > 0.5 && rightWrist.visibility > 0.5) {
-                    const dx = leftWrist.x - rightWrist.x;
-                    const dy = leftWrist.y - rightWrist.y;
+                if (leftPalm.visibility > 0.5 && rightPalm.visibility > 0.5) {
+                    const dx = leftPalm.x - rightPalm.x;
+                    const dy = leftPalm.y - rightPalm.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
+                    
                     const threshold = 0.08;
 
-                    // 記錄左手腕位置供畫面繪製特效（需轉換座標）
-                    leftWristPos = { x: (1 - leftWrist.x) * WIDTH, y: leftWrist.y * HEIGHT };
+                    leftPalmPos = { x: (1 - leftPalm.x) * WIDTH, y: leftPalm.y * HEIGHT };
 
                     if (distance < threshold) {
-                        wristsCollided = true;
+                        palmsCollided = true;
                     }
                 }
             }
 
-            // 3. 根據不同的遊戲狀態執行邏輯與繪製
+            // 3. 狀態機邏輯
             switch (currentState) {
                 
                 case STATES.TESTING:
-                    // --- 測試模式邏輯 ---
-                    // 繪製半透明遮罩，讓玩家看清楚測試提示
                     canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
                     canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
 
@@ -152,41 +156,38 @@
 
                     canvasCtx.fillStyle = 'white';
                     canvasCtx.font = '20px Arial';
-                    canvasCtx.fillText("請退後至全身入鏡，並將雙手手腕相碰一次", WIDTH / 2, HEIGHT / 2 - 10);
+                    canvasCtx.fillText("請退後至全身入鏡，並將雙手手掌相碰一次", WIDTH / 2, HEIGHT / 2 - 10);
 
-                    if (wristsCollided) {
-                        if (!isWristsTouching) {
-                            isWristsTouching = true;
-                            testSuccessTimer = 60; // 觸發成功，設定倒數格數（約 2 秒）
+                    if (palmsCollided) {
+                        if (!isPalmsTouching) {
+                            isPalmsTouching = true;
+                            testSuccessTimer = 60; // 倒數約 2 秒
                         }
                     } else {
-                        isWristsTouching = false;
+                        isPalmsTouching = false;
                     }
 
-                    // 畫出手腕碰撞特效
-                    if (wristsCollided && leftWristPos) {
+                    if (palmsCollided && leftPalmPos) {
                         canvasCtx.beginPath();
-                        canvasCtx.arc(leftWristPos.x, leftWristPos.y, 40, 0, 2 * Math.PI);
-                        canvasCtx.strokeStyle = 'yellow';
+                        canvasCtx.arc(leftPalmPos.x, leftPalmPos.y, 40, 0, 2 * Math.PI);
+                        canvasCtx.strokeStyle = 'cyan';
                         canvasCtx.lineWidth = 5;
                         canvasCtx.stroke();
                     }
 
-                    // 如果測試成功，顯示成功訊息並倒數進入遊戲
                     if (testSuccessTimer > 0) {
                         testSuccessTimer--;
-                        canvasCtx.fillStyle = 'yellow';
+                        canvasCtx.fillStyle = 'cyan';
                         canvasCtx.font = 'bold 24px Arial';
                         canvasCtx.fillText("測試成功！遊戲即將開始...", WIDTH / 2, HEIGHT / 2 + 50);
 
                         if (testSuccessTimer === 0) {
-                            resetGame(); // 正式進入遊戲
+                            resetGame();
                         }
                     }
                     break;
 
                 case STATES.PLAYING:
-                    // --- 遊戲進行中邏輯 ---
                     bird.velocity += bird.gravity;
                     bird.y += bird.velocity;
 
@@ -196,22 +197,20 @@
                         score++;
                     }
 
-                    // 處理遊戲中的手腕拍打
-                    if (wristsCollided) {
-                        if (!isWristsTouching) {
+                    if (palmsCollided) {
+                        if (!isPalmsTouching) {
                             bird.velocity = bird.flapPower;
-                            isWristsTouching = true;
+                            isPalmsTouching = true;
                         }
-                        // 遊戲中碰撞也畫個小黃圈提示
-                        if (leftWristPos) {
+                        if (leftPalmPos) {
                             canvasCtx.beginPath();
-                            canvasCtx.arc(leftWristPos.x, leftWristPos.y, 20, 0, 2 * Math.PI);
-                            canvasCtx.strokeStyle = 'yellow';
+                            canvasCtx.arc(leftPalmPos.x, leftPalmPos.y, 25, 0, 2 * Math.PI);
+                            canvasCtx.strokeStyle = 'cyan';
                             canvasCtx.lineWidth = 3;
                             canvasCtx.stroke();
                         }
                     } else {
-                        isWristsTouching = false;
+                        isPalmsTouching = false;
                     }
 
                     // 邊界與柱子碰撞偵測
@@ -239,7 +238,6 @@
                     break;
 
                 case STATES.GAMEOVER:
-                    // --- 遊戲結束邏輯 ---
                     canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
                     canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
                     
@@ -257,7 +255,6 @@
             canvasCtx.restore();
         });
 
-        // 啟動攝影機
         const camera = new Camera(videoElement, {
             onFrame: async () => {
                 await pose.send({ image: videoElement });
