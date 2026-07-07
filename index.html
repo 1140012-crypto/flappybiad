@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>體感 Flappy Bird (大空隙輕鬆版)</title>
+    <title>體感 Flappy Bird (終極完美版)</title>
     <style>
         html, body {
             margin: 0;
@@ -61,19 +61,46 @@
         const GROUND_HEIGHT = 50; 
         
         let bird = { x: WIDTH / 2, y: HEIGHT / 2, radius: 22, velocity: 0, gravity: 0.5, flapPower: -10 };
-        
-        // 【已修改】將 gap 從 220 改為 280，讓水管空隙明顯變大
         let pipe = { x: WIDTH, width: 90, gap: 280, speed: 6, topHeight: 0 }; 
         
         let score = 0;
         let isPalmsTouching = false; 
         let testSuccessTimer = 0;
+        let audioCtx = null;
 
         const PIP = { x: 30, y: 30, width: 280, height: 157 }; 
 
+        function playJumpSound() {
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                osc.type = 'triangle'; 
+                osc.frequency.setValueAtTime(250, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(550, audioCtx.currentTime + 0.12);
+                
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+                
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.12);
+            } catch (e) {
+                console.log("音效播放失敗:", e);
+            }
+        }
+
         function resetPipe() {
             pipe.x = WIDTH;
-            // 動態計算公式依然會自動完美適應新的空隙大小
             pipe.topHeight = Math.floor(Math.random() * (HEIGHT - GROUND_HEIGHT - pipe.gap - 150)) + 70;
         }
 
@@ -83,6 +110,7 @@
             score = 0;
             resetPipe();
             currentState = STATES.PLAYING;
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
         }
 
         window.addEventListener('keydown', (e) => {
@@ -150,6 +178,7 @@
                     if (!isPalmsTouching) {
                         bird.velocity = bird.flapPower;
                         isPalmsTouching = true;
+                        playJumpSound(); 
                     }
                 } else {
                     isPalmsTouching = false;
@@ -246,6 +275,7 @@
                     if (!isPalmsTouching) {
                         isPalmsTouching = true;
                         testSuccessTimer = 60; 
+                        playJumpSound(); 
                     }
                 } else {
                     isPalmsTouching = false;
