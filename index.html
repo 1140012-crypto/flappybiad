@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>體感 Flappy Bird (終極防護罩版)</title>
+    <title>體感 Flappy Bird (挺身起立無敵版)</title>
     <style>
         html, body {
             margin: 0;
@@ -68,9 +68,9 @@
         let testSuccessTimer = 0;
         let audioCtx = null;
 
-        // 深蹲與無敵狀態變數
-        let baseHipKneeDist = 0.18;      
-        let wasSquatting = false;        
+        // 起立與無敵狀態變數
+        let baseHipKneeDist = 0.18;      // 基準臀膝垂直距離
+        let wasStandingUp = false;       // 記錄上一格畫面是否處於站直狀態
         let invincibleEndTime = 0;       
         let cooldownEndTime = 0;         
 
@@ -129,7 +129,7 @@
             score = 0;
             invincibleEndTime = 0;
             cooldownEndTime = 0;
-            wasSquatting = false;
+            wasStandingUp = false;
             resetPipe();
             currentState = STATES.PLAYING;
             if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
@@ -167,12 +167,12 @@
             // 2. 骨架偵測
             let palmsCollided = false;
             let rawLeftPalm = null;
-            let isSquattingNow = false;
+            let isStandingNow = false;
 
             if (results.poseLandmarks) {
                 const landmarks = results.poseLandmarks;
                 
-                // 擊掌
+                // 擊掌偵測
                 const leftPalm = landmarks[19];  
                 const rightPalm = landmarks[20]; 
                 if (leftPalm.visibility > 0.5 && rightPalm.visibility > 0.5) {
@@ -184,13 +184,13 @@
                     if (distance < threshold) palmsCollided = true;
                 }
 
-                // 深蹲
+                // 【修改】起立偵測：當前臀膝距離拉大，代表身體挺直起立
                 const leftHip = landmarks[23];
                 const leftKnee = landmarks[25];
                 if (leftHip.visibility > 0.5 && leftKnee.visibility > 0.5) {
                     const currentHipKneeDist = Math.abs(leftKnee.y - leftHip.y);
-                    if (currentHipKneeDist < baseHipKneeDist * 0.65) {
-                        isSquattingNow = true;
+                    if (currentHipKneeDist > baseHipKneeDist * 1.05) {
+                        isStandingNow = true;
                     }
                 }
             }
@@ -216,15 +216,15 @@
                     isPalmsTouching = false;
                 }
 
-                // 觸發深蹲無敵
-                if (isSquattingNow && !wasSquatting) {
+                // 【修改】觸發挺身起立大絕招
+                if (isStandingNow && !wasStandingUp) {
                     if (currentTime > cooldownEndTime) {
                         invincibleEndTime = currentTime + 5000; 
                         cooldownEndTime = currentTime + 12000;  
                         playShieldSound();
                     }
                 }
-                wasSquatting = isSquattingNow;
+                wasStandingUp = isStandingNow;
 
                 const isInvincible = currentTime < invincibleEndTime;
 
@@ -311,7 +311,7 @@
                         canvasCtx.fillText(`⏳ 大絕招冷卻中 (CD): ${cdLeft} 秒`, 40, HEIGHT - 25);
                     } else {
                         canvasCtx.fillStyle = '#00ff00';
-                        canvasCtx.fillText("⚡ 大絕招準備就緒！[起立蹲下] 即可發動無敵！", 40, HEIGHT - 25);
+                        canvasCtx.fillText("⚡ 大絕招準備就緒！[向上挺身起立] 即可發動無敵！", 40, HEIGHT - 25);
                     }
                 }
             }
@@ -361,6 +361,7 @@
                         if (results.poseLandmarks) {
                             const l = results.poseLandmarks;
                             if (l[23] && l[25]) {
+                                // 捕捉擊掌瞬間的臀膝距離作為初始值
                                 baseHipKneeDist = Math.abs(l[25].y - l[23].y);
                                 if(baseHipKneeDist < 0.05) baseHipKneeDist = 0.18; 
                             }
