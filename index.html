@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>體感 Flappy Bird (挺身起立無敵原生多鏡頭版)</title>
+    <title>體感/鍵盤雙模 Flappy Bird</title>
     <style>
         html, body {
             margin: 0;
@@ -107,7 +107,7 @@
         let cooldownEndTime = 0;         
 
         const PIP = { x: 30, y: 30, width: 280, height: 157 }; 
-        let currentStream = null; // 儲存原生 MediaStream 串流
+        let currentStream = null; 
 
         // 復古跳躍音效
         function playJumpSound() {
@@ -143,6 +143,20 @@
             } catch (e) {}
         }
 
+        function triggerShield() {
+            const currentTime = performance.now();
+            if (currentTime > cooldownEndTime) {
+                invincibleEndTime = currentTime + 5000; 
+                cooldownEndTime = currentTime + 12000;  
+                playShieldSound();
+            }
+        }
+
+        function triggerFlap() {
+            bird.velocity = bird.flapPower;
+            playJumpSound(); 
+        }
+
         function resetPipe() {
             pipe.x = WIDTH;
             pipe.topHeight = Math.floor(Math.random() * (HEIGHT - GROUND_HEIGHT - pipe.gap - 150)) + 70;
@@ -160,8 +174,27 @@
             if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
         }
 
+        // 【修改】監聽鍵盤事件：新增空白鍵跳躍、向上鍵無敵
         window.addEventListener('keydown', (e) => {
-            if (e.key.toLowerCase() === 'r' && currentState === STATES.GAMEOVER) {
+            const key = e.key.toLowerCase();
+            
+            if (key === 'r' && currentState === STATES.GAMEOVER) {
+                resetGame();
+            }
+            
+            if (currentState === STATES.PLAYING) {
+                if (e.key === ' ' || key === 'spacebar') { // 空白鍵跳躍
+                    e.preventDefault(); // 防止網頁捲動
+                    triggerFlap();
+                }
+                if (e.key === 'ArrowUp') { // 向上鍵發動無敵
+                    e.preventDefault();
+                    triggerShield();
+                }
+            }
+
+            // 校正階段按空白鍵也可以直接跳過進入遊戲
+            if (currentState === STATES.TESTING && (e.key === ' ' || e.key === 'ArrowUp')) {
                 resetGame();
             }
         });
@@ -232,23 +265,19 @@
                     score++;
                 }
 
+                // 體感擊掌跳躍
                 if (palmsCollided) {
                     if (!isPalmsTouching) {
-                        bird.velocity = bird.flapPower;
+                        triggerFlap();
                         isPalmsTouching = true;
-                        playJumpSound(); 
                     }
                 } else {
                     isPalmsTouching = false;
                 }
 
-                // 觸發挺身起立大絕招
+                // 體感挺身起立無敵
                 if (isStandingNow && !wasStandingUp) {
-                    if (currentTime > cooldownEndTime) {
-                        invincibleEndTime = currentTime + 5000; 
-                        cooldownEndTime = currentTime + 12000;  
-                        playShieldSound();
-                    }
+                    triggerShield();
                 }
                 wasStandingUp = isStandingNow;
 
@@ -324,7 +353,7 @@
                 canvasCtx.strokeText(`Score: ${score}`, WIDTH - 40, 70);
                 canvasCtx.fillText(`Score: ${score}`, WIDTH - 40, 70);
 
-                // 大絕招 UI 提示
+                // 大絕招 UI 提示（更新提示文字包含鍵盤說明）
                 if (currentState === STATES.PLAYING) {
                     canvasCtx.font = 'bold 22px Arial';
                     canvasCtx.textAlign = 'left';
@@ -337,7 +366,7 @@
                         canvasCtx.fillText(`⏳ 大絕招冷卻中 (CD): ${cdLeft} 秒`, 40, HEIGHT - 25);
                     } else {
                         canvasCtx.fillStyle = '#00ff00';
-                        canvasCtx.fillText("⚡ 大絕招準備就緒！[向上挺身起立] 即可發動無敵！", 40, HEIGHT - 25);
+                        canvasCtx.fillText("⚡ 大絕: [挺身起立] 或 按鍵盤 [向上鍵 ⬆️] 發動無敵！", 40, HEIGHT - 25);
                     }
                 }
             }
@@ -372,11 +401,14 @@
                 canvasCtx.fillStyle = '#00ff00';
                 canvasCtx.font = 'bold 45px Arial';
                 canvasCtx.textAlign = 'center';
-                canvasCtx.fillText("【 操控測試 Calibration 】", WIDTH / 2, HEIGHT / 2 - 60);
+                canvasCtx.fillText("【 操控測試 / 鍵盤模式 】", WIDTH / 2, HEIGHT / 2 - 60);
 
                 canvasCtx.fillStyle = 'white';
                 canvasCtx.font = '24px Arial';
-                canvasCtx.fillText("請退後至全身入鏡，並將雙手手掌相碰一次", WIDTH / 2, HEIGHT / 2);
+                canvasCtx.fillText("體感：請退後至全身入鏡，並雙手相碰一次校正", WIDTH / 2, HEIGHT / 2 - 10);
+                canvasCtx.fillStyle = '#aaa';
+                canvasCtx.font = '20px Arial';
+                canvasCtx.fillText("鍵盤：直接按下 [空白鍵] 或 [向上鍵] 可直接開玩！", WIDTH / 2, HEIGHT / 2 + 30);
 
                 if (palmsCollided) {
                     if (!isPalmsTouching) {
@@ -400,7 +432,7 @@
                     testSuccessTimer--;
                     canvasCtx.fillStyle = 'cyan';
                     canvasCtx.font = 'bold 28px Arial';
-                    canvasCtx.fillText("測試成功並已校正身高！遊戲即將開始...", WIDTH / 2, HEIGHT / 2 + 80);
+                    canvasCtx.fillText("測試成功並已校正身高！遊戲即將開始...", WIDTH / 2, HEIGHT / 2 + 90);
 
                     if (testSuccessTimer === 0) {
                         resetGame();
@@ -421,14 +453,12 @@
             }
         });
 
-        // --- 修正版：原生 WebRTC 多鏡頭列舉與熱切換控制 ---
+        // 原生 getUserMedia 控制核心
         async function initCamera() {
             try {
-                // 先行獲取權限以解鎖設備名稱 (Label)
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 stream.getTracks().forEach(track => track.stop());
 
-                // 列舉視訊硬體
                 const devices = await navigator.mediaDevices.enumerateDevices();
                 const videoDevices = devices.filter(device => device.kind === 'videoinput');
 
@@ -451,9 +481,7 @@
             }
         }
 
-        // 原生 getUserMedia 控制核心，取代不穩定的 MediaPipe 內置 Camera 類別
         async function startNativeCamera(deviceId) {
-            // 確實把舊的視訊串流完全關閉，防止硬體獨占鎖死
             if (currentStream) {
                 currentStream.getTracks().forEach(track => track.stop());
                 currentStream = null;
@@ -471,7 +499,6 @@
                 currentStream = await navigator.mediaDevices.getUserMedia(constraints);
                 videoElement.srcObject = currentStream;
 
-                // 建立效能更好的影像幀循環推播給 MediaPipe 偵測
                 function onFrameLoop() {
                     if (!currentStream || videoElement.paused || videoElement.ended) return;
                     pose.send({ image: videoElement }).then(() => {
@@ -489,20 +516,18 @@
 
             } catch (err) {
                 console.error("原生鏡頭硬體調度失敗:", err);
-                alert("切換鏡頭失敗！該攝影機可能正被其他應用程式（如 LINE、OBS、Zoom 等）佔用中。");
+                alert("切換鏡頭失敗！該攝影機可能正被其他應用程式佔用中。");
             }
         }
 
-        // 監聽下拉選單改變事件
         cameraSelect.addEventListener('change', (e) => {
             const selectedDeviceId = e.target.value;
             if (currentState !== STATES.LOADING) {
-                currentState = STATES.TESTING; // 切換鏡頭時，引導玩家回到 T-pose 校正狀態
+                currentState = STATES.TESTING; 
             }
             startNativeCamera(selectedDeviceId);
         });
 
-        // 進入網頁自動點火執行
         initCamera();
     </script>
 </body>
