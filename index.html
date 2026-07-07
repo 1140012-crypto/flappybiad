@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>體感 Flappy Bird (全螢幕實況版)</title>
+    <title>體感 Flappy Bird (置中紅框半透明版)</title>
     <style>
         html, body {
             margin: 0;
@@ -14,7 +14,6 @@
             background-color: #111;
             font-family: sans-serif;
         }
-        /* 讓畫布填滿整個瀏覽器視窗 */
         canvas {
             width: 100vw;
             height: 100vh;
@@ -48,7 +47,6 @@
         const canvasCtx = canvasElement.getContext('2d');
         const loadingText = document.getElementById('loading');
 
-        // --- 遊戲狀態定義 ---
         const STATES = {
             LOADING: 'LOADING',
             TESTING: 'TESTING',
@@ -57,24 +55,24 @@
         };
         let currentState = STATES.LOADING;
 
-        // --- 遊戲變數 (因應 1280x720 放大整體比例與物理參數) ---
+        // --- 遊戲變數 ---
         const WIDTH = canvasElement.width;
         const HEIGHT = canvasElement.height;
-        const GROUND_HEIGHT = 50; // 地板高度
+        const GROUND_HEIGHT = 50; 
         
-        let bird = { x: 200, y: HEIGHT / 2, radius: 22, velocity: 0, gravity: 0.5, flapPower: -10 };
+        // 角色置中
+        let bird = { x: WIDTH / 2, y: HEIGHT / 2, radius: 22, velocity: 0, gravity: 0.5, flapPower: -10 };
         let pipe = { x: WIDTH, width: 90, gap: 220, speed: 6, topHeight: 0 }; 
         
         let score = 0;
         let isPalmsTouching = false; 
         let testSuccessTimer = 0;
 
-        // 左上角視訊小視窗 (PIP) 的尺寸與位置
-        const PIP = { x: 30, y: 30, width: 280, height: 157 }; // 16:9 比例
+        // 左上角視訊尺寸與位置
+        const PIP = { x: 30, y: 30, width: 280, height: 157 }; 
 
         function resetPipe() {
             pipe.x = WIDTH;
-            // 確保柱子高度隨機且合理
             pipe.topHeight = Math.floor(Math.random() * (HEIGHT - GROUND_HEIGHT - pipe.gap - 150)) + 70;
         }
 
@@ -92,7 +90,6 @@
             }
         });
 
-        // --- MediaPipe Pose 初始化 ---
         const pose = new Pose({
             locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
         });
@@ -110,7 +107,7 @@
                 currentState = STATES.TESTING;
             }
 
-            // 1. 繪製遊戲背景 (經典 Flappy Bird 天空藍)
+            // 1. 繪製遊戲背景
             canvasCtx.fillStyle = '#70c5ce';
             canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
 
@@ -120,15 +117,15 @@
 
             if (results.poseLandmarks) {
                 const landmarks = results.poseLandmarks;
-                const leftPalm = landmarks[19];  // 左食指根部
-                const rightPalm = landmarks[20]; // 右食指根部
+                const leftPalm = landmarks[19];  
+                const rightPalm = landmarks[20]; 
 
                 if (leftPalm.visibility > 0.5 && rightPalm.visibility > 0.5) {
                     const dx = leftPalm.x - rightPalm.x;
                     const dy = leftPalm.y - rightPalm.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
                     
-                    const threshold = 0.09; // 微調感應寬容度
+                    const threshold = 0.09; 
                     rawLeftPalm = leftPalm;
 
                     if (distance < threshold) {
@@ -148,7 +145,6 @@
                     score++;
                 }
 
-                // 觸發跳躍
                 if (palmsCollided) {
                     if (!isPalmsTouching) {
                         bird.velocity = bird.flapPower;
@@ -158,7 +154,7 @@
                     isPalmsTouching = false;
                 }
 
-                // 碰撞偵測 (天花板、地板、柱子)
+                // 碰撞偵測
                 if (bird.y - bird.radius < 0 || bird.y + bird.radius > HEIGHT - GROUND_HEIGHT) {
                     currentState = STATES.GAMEOVER;
                 }
@@ -176,7 +172,6 @@
                 canvasCtx.fillRect(pipe.x, 0, pipe.width, pipe.topHeight);
                 canvasCtx.fillRect(pipe.x, pipe.topHeight + pipe.gap, pipe.width, HEIGHT - GROUND_HEIGHT - (pipe.topHeight + pipe.gap));
                 
-                // 柱子深色邊框線
                 canvasCtx.strokeStyle = '#53821a';
                 canvasCtx.lineWidth = 4;
                 canvasCtx.strokeRect(pipe.x, 0, pipe.width, pipe.topHeight);
@@ -188,7 +183,7 @@
                 canvasCtx.fillStyle = '#4fa32d';
                 canvasCtx.fillRect(0, HEIGHT - GROUND_HEIGHT, WIDTH, 12);
 
-                // 畫主角小鳥 (紅色圓形)
+                // 畫主角小鳥
                 canvasCtx.beginPath();
                 canvasCtx.arc(bird.x, bird.y, bird.radius, 0, 2 * Math.PI);
                 canvasCtx.fillStyle = '#f61010';
@@ -197,7 +192,7 @@
                 canvasCtx.lineWidth = 3;
                 canvasCtx.stroke();
 
-                // 右上角分數顯示
+                // 右上角分數
                 canvasCtx.fillStyle = 'white';
                 canvasCtx.strokeStyle = 'black';
                 canvasCtx.lineWidth = 6;
@@ -207,26 +202,21 @@
                 canvasCtx.fillText(`Score: ${score}`, WIDTH - 40, 70);
             }
 
-            // 5. 繪製左上角視訊小視窗 (PIP Overlay)
+            // 5. 繪製左上角視訊小視窗 (50% 半透明 + 紅色外框)
             canvasCtx.save();
-            // 畫小視窗的外框與背景
-            canvasCtx.fillStyle = '#000';
-            canvasCtx.fillRect(PIP.x - 4, PIP.y - 4, PIP.width + 8, PIP.height + 8);
+            canvasCtx.globalAlpha = 0.5; 
             
-            // 鏡像翻轉繪製視訊畫面至小視窗內
             canvasCtx.translate(PIP.x + PIP.width, PIP.y);
             canvasCtx.scale(-1, 1);
             canvasCtx.drawImage(results.image, 0, 0, PIP.width, PIP.height);
-            canvasCtx.restore();
+            canvasCtx.restore(); 
 
-            // 畫小視窗白色邊框
-            canvasCtx.strokeStyle = '#ffffff';
-            canvasCtx.lineWidth = 3;
+            canvasCtx.strokeStyle = '#ff0000';
+            canvasCtx.lineWidth = 4;
             canvasCtx.strokeRect(PIP.x - 2, PIP.y - 2, PIP.width + 4, PIP.height + 4);
 
-            // 在小視窗內繪製手掌相碰的特殊粒子反饋
+            // 繪製手掌相碰提示
             if (palmsCollided && rawLeftPalm) {
-                // 將 0~1 的座標換算至小視窗內部 (注意 X 軸已鏡像)
                 let fx = PIP.x + (1 - rawLeftPalm.x) * PIP.width;
                 let fy = PIP.y + rawLeftPalm.y * PIP.height;
                 
@@ -237,7 +227,7 @@
                 canvasCtx.stroke();
             }
 
-            // 6. 處理測試模式與結束模式的畫面覆蓋
+            // 6. 處理測試模式與結束模式
             if (currentState === STATES.TESTING) {
                 canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.65)';
                 canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
@@ -254,7 +244,7 @@
                 if (palmsCollided) {
                     if (!isPalmsTouching) {
                         isPalmsTouching = true;
-                        testSuccessTimer = 60; // 倒數約 2 秒
+                        testSuccessTimer = 60; 
                     }
                 } else {
                     isPalmsTouching = false;
