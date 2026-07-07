@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>體感 Flappy Bird (挺身起立無敵版)</title>
+    <title>體感 Flappy Bird (挺身起立無敵版-多鏡頭支援)</title>
     <style>
         html, body {
             margin: 0;
@@ -30,14 +30,45 @@
             text-align: center;
             z-index: 10;
         }
+        /* 【新增】鏡頭選擇器樣式 */
+        #cameraSelectContainer {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 20;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #444;
+            display: none; /* 獲取權限後才會顯示 */
+        }
+        #cameraSelectContainer label {
+            color: #fff;
+            font-size: 14px;
+            margin-right: 8px;
+        }
+        #cameraSelect {
+            padding: 4px 8px;
+            font-size: 14px;
+            background: #222;
+            color: #fff;
+            border: 1px solid #666;
+            border-radius: 4px;
+            cursor: pointer;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
-    <div id="loading">載入 AI 模型與攝影機中，請稍候...</div>
+    <div id="loading">載入 AI 模型與要求攝影機權限中...</div>
     
+    <div id="cameraSelectContainer">
+        <label for="cameraSelect">📷 選擇鏡頭:</label>
+        <select id="cameraSelect"></select>
+    </div>
+
     <video id="video" width="640" height="480" style="display: none;" autoplay playsinline></video>
     <canvas id="gameCanvas" width="1280" height="720"></canvas>
 
@@ -46,6 +77,8 @@
         const canvasElement = document.getElementById('gameCanvas');
         const canvasCtx = canvasElement.getContext('2d');
         const loadingText = document.getElementById('loading');
+        const cameraSelectContainer = document.getElementById('cameraSelectContainer');
+        const cameraSelect = document.getElementById('cameraSelect');
 
         const STATES = {
             LOADING: 'LOADING',
@@ -69,30 +102,27 @@
         let audioCtx = null;
 
         // 起立與無敵狀態變數
-        let baseHipKneeDist = 0.18;      // 基準臀膝垂直距離
-        let wasStandingUp = false;       // 記錄上一格畫面是否處於站直狀態
+        let baseHipKneeDist = 0.18;      
+        let wasStandingUp = false;       
         let invincibleEndTime = 0;       
         let cooldownEndTime = 0;         
 
         const PIP = { x: 30, y: 30, width: 280, height: 157 }; 
+        let currentCamera = null; // 用於儲存目前的 Camera 實例
 
         // 復古跳躍音效
         function playJumpSound() {
             try {
                 if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 if (audioCtx.state === 'suspended') audioCtx.resume();
-
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
                 osc.connect(gain); gain.connect(audioCtx.destination);
-                
                 osc.type = 'triangle'; 
                 osc.frequency.setValueAtTime(250, audioCtx.currentTime);
                 osc.frequency.exponentialRampToValueAtTime(550, audioCtx.currentTime + 0.12);
-                
                 gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
-                
                 osc.start(); osc.stop(audioCtx.currentTime + 0.12);
             } catch (e) {}
         }
@@ -102,18 +132,14 @@
             try {
                 if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 if (audioCtx.state === 'suspended') audioCtx.resume();
-
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
                 osc.connect(gain); gain.connect(audioCtx.destination);
-                
                 osc.type = 'sine'; 
                 osc.frequency.setValueAtTime(350, audioCtx.currentTime);
                 osc.frequency.linearRampToValueAtTime(850, audioCtx.currentTime + 0.3);
-                
                 gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
                 gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-                
                 osc.start(); osc.stop(audioCtx.currentTime + 0.3);
             } catch (e) {}
         }
@@ -155,6 +181,7 @@
         pose.onResults((results) => {
             if (currentState === STATES.LOADING) {
                 loadingText.style.display = 'none';
+                cameraSelectContainer.style.display = 'block'; // 顯示鏡頭選單
                 currentState = STATES.TESTING;
             }
 
@@ -184,7 +211,7 @@
                     if (distance < threshold) palmsCollided = true;
                 }
 
-                // 【修改】起立偵測：當前臀膝距離拉大，代表身體挺直起立
+                // 起立偵測
                 const leftHip = landmarks[23];
                 const leftKnee = landmarks[25];
                 if (leftHip.visibility > 0.5 && leftKnee.visibility > 0.5) {
@@ -216,7 +243,7 @@
                     isPalmsTouching = false;
                 }
 
-                // 【修改】觸發挺身起立大絕招
+                // 觸發挺身起立大絕招
                 if (isStandingNow && !wasStandingUp) {
                     if (currentTime > cooldownEndTime) {
                         invincibleEndTime = currentTime + 5000; 
@@ -361,7 +388,6 @@
                         if (results.poseLandmarks) {
                             const l = results.poseLandmarks;
                             if (l[23] && l[25]) {
-                                // 捕捉擊掌瞬間的臀膝距離作為初始值
                                 baseHipKneeDist = Math.abs(l[25].y - l[23].y);
                                 if(baseHipKneeDist < 0.05) baseHipKneeDist = 0.18; 
                             }
@@ -396,14 +422,76 @@
             }
         });
 
-        const camera = new Camera(videoElement, {
-            onFrame: async () => {
-                await pose.send({ image: videoElement });
-            },
-            width: 640,
-            height: 480
+        // 【新增】鏡頭列舉與啟動邏輯
+        async function initCamera() {
+            try {
+                // 先向瀏覽器請求一次鏡頭權限，這樣後面才能拿到正確的設備名稱 (Label)
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                // 成功取得權限後，先把這個暫時的 stream 關掉
+                stream.getTracks().forEach(track => track.stop());
+
+                // 列舉所有可用的影音設備
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+
+                // 清空並重新填充選單
+                cameraSelect.innerHTML = '';
+                videoDevices.forEach((device, index) => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    option.text = device.label || `攝影機 ${index + 1}`;
+                    cameraSelect.appendChild(option);
+                });
+
+                // 如果有找到鏡頭，預設啟動第一個
+                if (videoDevices.length > 0) {
+                    startCamera(videoDevices[0].deviceId);
+                } else {
+                    alert("找不到任何可用的攝影機！");
+                }
+
+            } catch (error) {
+                console.error("無法初始化攝影機選單:", error);
+                loadingText.innerText = "無法取得攝影機權限，請檢查瀏覽器設定。";
+            }
+        }
+
+        // 【新增】切換與啟動指定鏡頭的函式
+        function startCamera(deviceId) {
+            // 如果原本有正在執行的鏡頭，先將其關閉
+            if (currentCamera) {
+                currentCamera.stop();
+            }
+
+            // 建立 MediaPipe Camera 實例，並將其綁定到選擇的 deviceId 上
+            currentCamera = new Camera(videoElement, {
+                onFrame: async () => {
+                    await pose.send({ image: videoElement });
+                },
+                width: 640,
+                height: 480,
+                // 透過傳入 constraints 來指定特定的硬體鏡頭
+                facingMode: undefined,
+                deviceId: deviceId ? { exact: deviceId } : undefined
+            });
+
+            currentCamera.start().catch(err => {
+                console.error("鏡頭啟動失敗:", err);
+            });
+        }
+
+        // 【新增】當玩家點擊下拉選單切換鏡頭時觸發
+        cameraSelect.addEventListener('change', (e) => {
+            const selectedDeviceId = e.target.value;
+            // 切換鏡頭時重置為載入/測試狀態，防止骨架在切換瞬間錯亂
+            if (currentState !== STATES.LOADING) {
+                currentState = STATES.TESTING;
+            }
+            startCamera(selectedDeviceId);
         });
-        camera.start();
+
+        // 啟動執行
+        initCamera();
     </script>
 </body>
 </html>
