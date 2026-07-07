@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>體感 Flappy Bird (挺身起立無敵版-多鏡頭支援)</title>
+    <title>體感 Flappy Bird (挺身起立無敵原生多鏡頭版)</title>
     <style>
         html, body {
             margin: 0;
@@ -30,7 +30,6 @@
             text-align: center;
             z-index: 10;
         }
-        /* 【新增】鏡頭選擇器樣式 */
         #cameraSelectContainer {
             position: absolute;
             top: 15px;
@@ -40,7 +39,7 @@
             padding: 8px 12px;
             border-radius: 6px;
             border: 1px solid #444;
-            display: none; /* 獲取權限後才會顯示 */
+            display: none;
         }
         #cameraSelectContainer label {
             color: #fff;
@@ -108,7 +107,7 @@
         let cooldownEndTime = 0;         
 
         const PIP = { x: 30, y: 30, width: 280, height: 157 }; 
-        let currentCamera = null; // 用於儲存目前的 Camera 實例
+        let currentStream = null; // 儲存原生 MediaStream 串流
 
         // 復古跳躍音效
         function playJumpSound() {
@@ -181,7 +180,7 @@
         pose.onResults((results) => {
             if (currentState === STATES.LOADING) {
                 loadingText.style.display = 'none';
-                cameraSelectContainer.style.display = 'block'; // 顯示鏡頭選單
+                cameraSelectContainer.style.display = 'block'; 
                 currentState = STATES.TESTING;
             }
 
@@ -422,19 +421,17 @@
             }
         });
 
-        // 【新增】鏡頭列舉與啟動邏輯
+        // --- 修正版：原生 WebRTC 多鏡頭列舉與熱切換控制 ---
         async function initCamera() {
             try {
-                // 先向瀏覽器請求一次鏡頭權限，這樣後面才能拿到正確的設備名稱 (Label)
+                // 先行獲取權限以解鎖設備名稱 (Label)
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                // 成功取得權限後，先把這個暫時的 stream 關掉
                 stream.getTracks().forEach(track => track.stop());
 
-                // 列舉所有可用的影音設備
+                // 列舉視訊硬體
                 const devices = await navigator.mediaDevices.enumerateDevices();
                 const videoDevices = devices.filter(device => device.kind === 'videoinput');
 
-                // 清空並重新填充選單
                 cameraSelect.innerHTML = '';
                 videoDevices.forEach((device, index) => {
                     const option = document.createElement('option');
@@ -443,54 +440,69 @@
                     cameraSelect.appendChild(option);
                 });
 
-                // 如果有找到鏡頭，預設啟動第一個
                 if (videoDevices.length > 0) {
-                    startCamera(videoDevices[0].deviceId);
+                    startNativeCamera(videoDevices[0].deviceId);
                 } else {
                     alert("找不到任何可用的攝影機！");
                 }
-
             } catch (error) {
-                console.error("無法初始化攝影機選單:", error);
-                loadingText.innerText = "無法取得攝影機權限，請檢查瀏覽器設定。";
+                console.error("無法初始化攝影機權限:", error);
+                loadingText.innerText = "無法取得攝影機權限，請檢查瀏覽器隱私設定。";
             }
         }
 
-        // 【新增】切換與啟動指定鏡頭的函式
-        function startCamera(deviceId) {
-            // 如果原本有正在執行的鏡頭，先將其關閉
-            if (currentCamera) {
-                currentCamera.stop();
+        // 原生 getUserMedia 控制核心，取代不穩定的 MediaPipe 內置 Camera 類別
+        async function startNativeCamera(deviceId) {
+            // 確實把舊的視訊串流完全關閉，防止硬體獨占鎖死
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+                currentStream = null;
             }
 
-            // 建立 MediaPipe Camera 實例，並將其綁定到選擇的 deviceId 上
-            currentCamera = new Camera(videoElement, {
-                onFrame: async () => {
-                    await pose.send({ image: videoElement });
-                },
-                width: 640,
-                height: 480,
-                // 透過傳入 constraints 來指定特定的硬體鏡頭
-                facingMode: undefined,
-                deviceId: deviceId ? { exact: deviceId } : undefined
-            });
+            const constraints = {
+                video: {
+                    deviceId: deviceId ? { exact: deviceId } : undefined,
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                }
+            };
 
-            currentCamera.start().catch(err => {
-                console.error("鏡頭啟動失敗:", err);
-            });
+            try {
+                currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                videoElement.srcObject = currentStream;
+
+                // 建立效能更好的影像幀循環推播給 MediaPipe 偵測
+                function onFrameLoop() {
+                    if (!currentStream || videoElement.paused || videoElement.ended) return;
+                    pose.send({ image: videoElement }).then(() => {
+                        requestAnimationFrame(onFrameLoop);
+                    }).catch(err => {
+                        console.error("Pose 訊號追蹤錯誤:", err);
+                        requestAnimationFrame(onFrameLoop);
+                    });
+                }
+
+                videoElement.onloadedmetadata = () => {
+                    videoElement.play();
+                    requestAnimationFrame(onFrameLoop);
+                };
+
+            } catch (err) {
+                console.error("原生鏡頭硬體調度失敗:", err);
+                alert("切換鏡頭失敗！該攝影機可能正被其他應用程式（如 LINE、OBS、Zoom 等）佔用中。");
+            }
         }
 
-        // 【新增】當玩家點擊下拉選單切換鏡頭時觸發
+        // 監聽下拉選單改變事件
         cameraSelect.addEventListener('change', (e) => {
             const selectedDeviceId = e.target.value;
-            // 切換鏡頭時重置為載入/測試狀態，防止骨架在切換瞬間錯亂
             if (currentState !== STATES.LOADING) {
-                currentState = STATES.TESTING;
+                currentState = STATES.TESTING; // 切換鏡頭時，引導玩家回到 T-pose 校正狀態
             }
-            startCamera(selectedDeviceId);
+            startNativeCamera(selectedDeviceId);
         });
 
-        // 啟動執行
+        // 進入網頁自動點火執行
         initCamera();
     </script>
 </body>
