@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>體感/鍵盤雙模 Flappy Bird</title>
+    <title>體感/鍵盤雙模 Flappy Bird (酷黑防護罩版)</title>
     <style>
         html, body {
             margin: 0;
@@ -143,11 +143,12 @@
             } catch (e) {}
         }
 
+        // 大絕招啟動邏輯（改為 20 秒冷卻）
         function triggerShield() {
             const currentTime = performance.now();
             if (currentTime > cooldownEndTime) {
                 invincibleEndTime = currentTime + 5000; 
-                cooldownEndTime = currentTime + 12000;  
+                cooldownEndTime = currentTime + 20000;  
                 playShieldSound();
             }
         }
@@ -174,7 +175,7 @@
             if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
         }
 
-        // 【修改】監聽鍵盤事件：新增空白鍵跳躍、向上鍵無敵
+        // 鍵盤事件監聽
         window.addEventListener('keydown', (e) => {
             const key = e.key.toLowerCase();
             
@@ -183,17 +184,16 @@
             }
             
             if (currentState === STATES.PLAYING) {
-                if (e.key === ' ' || key === 'spacebar') { // 空白鍵跳躍
-                    e.preventDefault(); // 防止網頁捲動
+                if (e.key === ' ' || key === 'spacebar') { 
+                    e.preventDefault(); 
                     triggerFlap();
                 }
-                if (e.key === 'ArrowUp') { // 向上鍵發動無敵
+                if (e.key === 'ArrowUp') { 
                     e.preventDefault();
                     triggerShield();
                 }
             }
 
-            // 校正階段按空白鍵也可以直接跳過進入遊戲
             if (currentState === STATES.TESTING && (e.key === ' ' || e.key === 'ArrowUp')) {
                 resetGame();
             }
@@ -325,20 +325,20 @@
                 canvasCtx.lineWidth = 3;
                 canvasCtx.stroke();
 
-                // 藍色防護罩特效
+                // 【修改】黑色防護罩特效
                 if (currentState === STATES.PLAYING && currentTime < invincibleEndTime) {
                     canvasCtx.save();
                     canvasCtx.beginPath();
                     canvasCtx.arc(bird.x, bird.y, bird.radius + 12, 0, 2 * Math.PI);
-                    canvasCtx.strokeStyle = 'rgba(0, 191, 255, 0.85)'; 
+                    canvasCtx.strokeStyle = 'rgba(0, 0, 0, 0.9)'; // 填滿黑色主線
                     canvasCtx.lineWidth = 5;
                     canvasCtx.shadowBlur = 15;
-                    canvasCtx.shadowColor = '#00bfff';
+                    canvasCtx.shadowColor = '#333333'; // 暗灰黑色光暈
                     canvasCtx.stroke();
                     canvasCtx.restore();
 
                     let shieldLeft = ((invincibleEndTime - currentTime) / 1000).toFixed(1);
-                    canvasCtx.fillStyle = '#00bfff';
+                    canvasCtx.fillStyle = '#000000'; // 倒數文字也改成深色系
                     canvasCtx.font = 'bold 18px Arial';
                     canvasCtx.textAlign = 'center';
                     canvasCtx.fillText(`無敵: ${shieldLeft}s`, bird.x, bird.y - bird.radius - 22);
@@ -353,13 +353,13 @@
                 canvasCtx.strokeText(`Score: ${score}`, WIDTH - 40, 70);
                 canvasCtx.fillText(`Score: ${score}`, WIDTH - 40, 70);
 
-                // 大絕招 UI 提示（更新提示文字包含鍵盤說明）
+                // 大絕招 UI 提示
                 if (currentState === STATES.PLAYING) {
                     canvasCtx.font = 'bold 22px Arial';
                     canvasCtx.textAlign = 'left';
                     if (currentTime < invincibleEndTime) {
-                        canvasCtx.fillStyle = '#00bfff';
-                        canvasCtx.fillText("🛡️ 防護罩安全啟動中！無視障礙物！", 40, HEIGHT - 25);
+                        canvasCtx.fillStyle = '#333333';
+                        canvasCtx.fillText("🖤 黑暗防護罩安全啟動中！無視障礙物！", 40, HEIGHT - 25);
                     } else if (currentTime < cooldownEndTime) {
                         let cdLeft = ((cooldownEndTime - currentTime) / 1000).toFixed(1);
                         canvasCtx.fillStyle = '#ff9900';
@@ -453,7 +453,7 @@
             }
         });
 
-        // 原生 getUserMedia 控制核心
+        // 原生 getUserMedia 多鏡頭驅動核心
         async function initCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
