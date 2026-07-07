@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>體感 Flappy Bird (置中紅框半透明版)</title>
+    <title>體感 Flappy Bird (大空隙輕鬆版)</title>
     <style>
         html, body {
             margin: 0;
@@ -60,19 +60,20 @@
         const HEIGHT = canvasElement.height;
         const GROUND_HEIGHT = 50; 
         
-        // 角色置中
         let bird = { x: WIDTH / 2, y: HEIGHT / 2, radius: 22, velocity: 0, gravity: 0.5, flapPower: -10 };
-        let pipe = { x: WIDTH, width: 90, gap: 220, speed: 6, topHeight: 0 }; 
+        
+        // 【已修改】將 gap 從 220 改為 280，讓水管空隙明顯變大
+        let pipe = { x: WIDTH, width: 90, gap: 280, speed: 6, topHeight: 0 }; 
         
         let score = 0;
         let isPalmsTouching = false; 
         let testSuccessTimer = 0;
 
-        // 左上角視訊尺寸與位置
         const PIP = { x: 30, y: 30, width: 280, height: 157 }; 
 
         function resetPipe() {
             pipe.x = WIDTH;
+            // 動態計算公式依然會自動完美適應新的空隙大小
             pipe.topHeight = Math.floor(Math.random() * (HEIGHT - GROUND_HEIGHT - pipe.gap - 150)) + 70;
         }
 
